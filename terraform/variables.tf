@@ -12,8 +12,3 @@ variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
 }
-
-variable "bucket_name" {
-  description = "bucket name suffix"
-  type        = string
-}
