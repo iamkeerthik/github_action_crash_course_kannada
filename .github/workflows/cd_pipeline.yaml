@@ -1,0 +1,87 @@
+name: CD - Deploy to Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select environment to deploy"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - stg
+          - prod
+      image_tag:
+        description: "Docker tag version to deploy"
+        required: true
+        default: "v1.0.0"
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: github_action_demo
+  IMAGE_NAME: github-action-demo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --------------------------
+      # 👇 Environment Specific Sections
+      # --------------------------
+
+      - name: 🧪 Deploy to Dev
+        if: github.event.inputs.environment == 'dev'
+        run: |
+          echo "Deploying to DEV environment"
+          echo "Using secret: KUBE_CONFIG_DEV"
+          echo "${{ secrets.KUBE_CONFIG_DEV }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          ECR_URI=${{ secrets.AWS_ECR_URI_DEV }}
+          IMAGE=$ECR_URI/${{ env.ECR_REPO }}:${{ github.event.inputs.image_tag }}
+          echo "kubectl set image deployment/dev-app dev-app=$IMAGE"
+          echo "kubectl apply -f k8s/dev/deployment.yaml"
+          echo "kubectl rollout status deployment/dev-app"
+
+      - name: 🚀 Deploy to Staging
+        if: github.event.inputs.environment == 'stg'
+        run: |
+          echo "Deploying to STAGING environment"
+          echo "Using secret: KUBE_CONFIG_STG"
+          echo "${{ secrets.KUBE_CONFIG_STG }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          ECR_URI=${{ secrets.AWS_ECR_URI_STG }}
+          IMAGE=$ECR_URI/${{ env.ECR_REPO }}:${{ github.event.inputs.image_tag }}
+          echo "kubectl set image deployment/stg-app stg-app=$IMAGE"
+          echo "kubectl apply -f k8s/stg/deployment.yaml"
+          echo "kubectl rollout status deployment/stg-app"
+
+      - name: 🏁 Deploy to Production
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          echo "Deploying to PROD environment"
+          echo "Using secret: KUBE_CONFIG_PROD"
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          ECR_URI=${{ secrets.AWS_ECR_URI_PROD }}
+          IMAGE=$ECR_URI/${{ env.ECR_REPO }}:${{ github.event.inputs.image_tag }}
+          echo "kubectl set image deployment/prod-app prod-app=$IMAGE"
+          echo "kubectl apply -f k8s/prod/deployment.yaml"
+          echo "kubectl rollout status deployment/prod-app"
+
+      - name: ✅ Summary
+        run: |
+          echo "Deployment finished!"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Tag: ${{ github.event.inputs.image_tag }}"
