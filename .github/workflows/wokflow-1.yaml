@@ -1,9 +1,8 @@
 name: First Workflow
 on:
-  push:
-    branches-ignore:
+  pull_request:
+    branches:
       - feature-*
-
 jobs:
   build:
     runs-on: ubuntu-latest
