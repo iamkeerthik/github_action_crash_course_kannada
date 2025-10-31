@@ -1,0 +1,99 @@
+name: Bump Version, Build & Push Docker, and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Select version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write  # To push tags & create releases
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: github_action_demo # your ECR repository name
+  IMAGE_NAME: github-action-demo
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # get all tags
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          latest=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $latest"
+          echo "tag=$latest" >> $GITHUB_OUTPUT
+
+      - name: Calculate next version
+        id: bump
+        run: |
+          old=${{ steps.get_tag.outputs.tag }}
+          ver=${old#v}
+          IFS='.' read -r major minor patch <<< "$ver"
+
+          case "${{ github.event.inputs.bump_type }}" in
+            major)
+              major=$((major + 1)); minor=0; patch=0;;
+            minor)
+              minor=$((minor + 1)); patch=0;;
+            patch)
+              patch=$((patch + 1));;
+          esac
+
+          new_tag="v$major.$minor.$patch"
+          echo "Next version: $new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Create new Git tag
+        run: |
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Docker 
+        id: push-docker
+        if: github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_TAG=${{ steps.bump.outputs.new_tag }}
+          ECR_URI=${{ steps.login-ecr.outputs.registry }}
+          docker build -t $ECR_URI/${{ env.ECR_REPO }}:$IMAGE_TAG .
+          docker push $ECR_URI/${{ env.ECR_REPO }}:$IMAGE_TAG
+          echo "image_url=$ECR_URI/${{ env.ECR_REPO }}:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: success() && steps.push-docker.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          name: "Release ${{ steps.bump.outputs.new_tag }}"
+          body: |
+            🆕 Auto-generated release
+            Type: **${{ github.event.inputs.bump_type }}**
+            Commit: ${{ github.sha }}
+            Docker Image: `${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.bump.outputs.new_tag }}`
