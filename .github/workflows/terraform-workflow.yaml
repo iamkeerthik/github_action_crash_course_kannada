@@ -63,7 +63,7 @@ jobs:
             terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
           fi
 
-           # ---------- TERRAFORM PLAN WITH WORKSPACE SUPPORT ----------
+        # ---------- TERRAFORM PLAN WITH WORKSPACE SUPPORT ----------
       - name: Terraform Plan
         id: plan
         run: |
