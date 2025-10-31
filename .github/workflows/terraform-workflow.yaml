@@ -143,14 +143,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-       # ---------- AUTO CLOSE ISSUE ----------
-      - name: Auto Close Approval Issue
-        if: steps.wait.outputs.approval == 'yes' || steps.wait.outputs.approval == 'no'
+    # ---------- AUTO CLOSE ISSUE ----------
+      - name: Auto Close Approval Issue (Approved)
+        if: steps.wait.outputs.approval == 'yes'
         uses: peter-evans/close-issue@v3
         with:
           issue-number: ${{ steps.create_issue.outputs.issue-number }}
           comment: |
-            ${{ steps.wait.outputs.approval == 'yes' && '✅ Approved and executing Terraform ' || '❌ Cancelled Terraform ' }}${{ github.event.inputs.action }} by @${{ github.actor }} on ${{ github.event.inputs.environment }} environment.
+            ✅ Approved and executed Terraform **${{ github.event.inputs.action }}**  
+            Environment: **${{ github.event.inputs.environment }}**  
+            Approved by: @${{ github.actor }}
+
+      - name: Auto Close Approval Issue (Declined)
+        if: steps.wait.outputs.approval == 'no'
+        uses: peter-evans/close-issue@v3
+        with:
+          issue-number: ${{ steps.create_issue.outputs.issue-number }}
+          comment: |
+            ❌ Terraform **${{ github.event.inputs.action }}** cancelled by @${{ github.actor }}  
+            Environment: **${{ github.event.inputs.environment }}**
 
       # ---------- APPLY / DESTROY WITH APPROVAL ----------
       - name: Terraform Apply
