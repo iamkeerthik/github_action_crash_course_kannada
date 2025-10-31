@@ -1,6 +1,6 @@
 name: First Workflow
 on:
-  pull_request:
+  push:
     branches:
       - feature-*
 jobs:
