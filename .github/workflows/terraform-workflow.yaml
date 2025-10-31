@@ -63,22 +63,35 @@ jobs:
             terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
           fi
 
-      # ---------- ALWAYS RUN PLAN ----------
+     # ---------- TERRAFORM PLAN WITH WORKSPACE SUPPORT ----------
       - name: Terraform Plan
         id: plan
         run: |
-          terraform -chdir=${{ env.TF_DIR }} plan -out=tfplan -var-file=env/${{ github.event.inputs.environment }}.tfvars
-          terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > plan.txt
+          # Select or create workspace dynamically
+          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }} \
+            || terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
+
+          echo "📦 Using workspace: $(terraform -chdir=${{ env.TF_DIR }} workspace show)"
+
+          # Run Terraform plan
+          terraform -chdir=${{ env.TF_DIR }} plan \
+            -var-file=env/${{ github.event.inputs.environment }}.tfvars \
+            -out=tfplan
+
+          # Export plan output to repo root for issue creation
+          terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > ../plan.txt
+
+          echo "✅ Terraform plan complete. Output saved to plan.txt"
         continue-on-error: true
 
-            # ---------- CREATE ISSUE FOR APPROVAL ----------
+      # ---------- CREATE ISSUE FOR APPROVAL ----------
       - name: Create Approval Issue
         if: github.event.inputs.action != 'plan'
         id: create_issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Terraform Approval Required: ${{ github.event.inputs.action }} → ${{ github.event.inputs.environment }}"
-          content-filepath: ${{ env.TF_DIR }}/plan.txt
+          content-filepath: plan.txt
           labels: terraform, approval
           assignees: ${{ github.actor }}
         env:
