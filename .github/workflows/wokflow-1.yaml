@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: show selected tag
-        run: echo "Buidling docker image for ${{github.event.input.image_tag}}"
+        run: echo "Buidling docker image for ${{ github.event.inputs.image_tag }}"
 
       - name: Building docker image
-        run: docker build -t my-nginx:${{github.event.input.image_tag}} .
+        run: docker build -t my-nginx:${{ github.event.inputs.image_tag }} .
