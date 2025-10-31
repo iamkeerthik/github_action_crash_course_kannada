@@ -9,6 +9,6 @@ on:
 
 jobs:
   trigger-build:
-    uses: .github/workflows/wokflow-1.yaml
+    uses: ./.github/workflows/wokflow-1.yaml
     with:
        image_tag: ${{ github.events.inputs.image_tag }}
