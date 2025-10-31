@@ -1,8 +1,8 @@
 name: First Workflow
 on:
-  push:
-    branches-ignore:
-      - feature-*
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
