@@ -71,16 +71,18 @@ jobs:
           terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > plan.txt
         continue-on-error: true
 
-      # ---------- CREATE ISSUE FOR APPROVAL ----------
+            # ---------- CREATE ISSUE FOR APPROVAL ----------
       - name: Create Approval Issue
         if: github.event.inputs.action != 'plan'
         id: create_issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Terraform Approval Required: ${{ github.event.inputs.action }} → ${{ github.event.inputs.environment }}"
-          content-filepath: terraform/plan.txt
+          content-filepath: ${{ env.TF_DIR }}/plan.txt
           labels: terraform, approval
           assignees: ${{ github.actor }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ---------- WAIT FOR USER DECISION ----------
       - name: Wait for Approval Comment
@@ -89,6 +91,13 @@ jobs:
         run: |
           echo "Waiting for approval on GitHub Issue..."
           issue_number=${{ steps.create_issue.outputs.issue-number }}
+
+          if [ -z "$issue_number" ]; then
+            echo "❌ No issue created — please check earlier steps."
+            exit 1
+          fi
+
+          echo "👉 Issue created: https://github.com/${{ github.repository }}/issues/$issue_number"
           echo "issue_number=$issue_number" >> $GITHUB_OUTPUT
 
           for i in {1..30}; do
