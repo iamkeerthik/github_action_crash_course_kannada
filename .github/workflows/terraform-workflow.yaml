@@ -1,4 +1,4 @@
-name: Terraform CI/CD with Workspace & Approval
+name: Terraform CI/CD 
 
 on:
   workflow_dispatch:
@@ -55,9 +55,13 @@ jobs:
 
       - name: Select or Create Workspace
         run: |
-          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }} || \
-          terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
-          echo "Using workspace: ${{ github.event.inputs.environment }}"
+          echo "🔍 Checking Terraform workspace: ${{ github.event.inputs.environment }}"
+          if terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }} 2>/dev/null; then
+            echo "✅ Using existing workspace: ${{ github.event.inputs.environment }}"
+          else
+            echo "ℹ️ Workspace not found. Creating new workspace: ${{ github.event.inputs.environment }}"
+            terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
+          fi
 
       # ---------- ALWAYS RUN PLAN ----------
       - name: Terraform Plan
