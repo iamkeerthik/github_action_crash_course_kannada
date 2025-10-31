@@ -86,6 +86,12 @@ jobs:
 
 
       # ---------- CREATE ISSUE FOR APPROVAL ----------
+      - name: Add Approval Instructions
+        if: github.event.inputs.action != 'plan'
+        run: |
+          echo -e "\n\n---\n💬 **Approval Required**\nPlease comment 'yes' to approve and proceed, or 'no' to cancel." >> plan.txt
+        shell: bash
+
       - name: Create Approval Issue
         if: github.event.inputs.action != 'plan'
         id: create_issue
@@ -143,17 +149,11 @@ jobs:
           terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }}
           terraform -chdir=${{ env.TF_DIR }} destroy -auto-approve -var-file=env/${{ github.event.inputs.environment }}.tfvars
 
-      # ---------- CLOSE ISSUE ----------
-      - name: Close Approval Issue (Approved)
-        if: steps.wait.outputs.approval == 'yes'
+        # ---------- AUTO CLOSE ISSUE ----------
+      - name: Auto Close Approval Issue
+        if: steps.wait.outputs.approval == 'yes' || steps.wait.outputs.approval == 'no'
         uses: peter-evans/close-issue@v3
         with:
-          issue-number: ${{ steps.wait.outputs.issue_number }}
-          comment: "✅ Approved and executed Terraform ${{ github.event.inputs.action }} successfully."
-
-      - name: Close Approval Issue (Declined)
-        if: steps.wait.outputs.approval == 'no'
-        uses: peter-evans/close-issue@v3
-        with:
-          issue-number: ${{ steps.wait.outputs.issue_number }}
-          comment: "❌ Terraform ${{ github.event.inputs.action }} cancelled by user."
+          issue-number: ${{ steps.create_issue.outputs.issue-number }}
+          comment: |
+            ${{ steps.wait.outputs.approval == 'yes' && '✅ Approved and executed Terraform ' || '❌ Cancelled Terraform ' }}${{ github.event.inputs.action }} by @${{ github.actor }} on ${{ github.event.inputs.environment }} environment.
