@@ -1,8 +1,10 @@
 name: First Workflow
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Manual Workflow
+    types:
+      - completed
 jobs:
   build:
     runs-on: ubuntu-latest
