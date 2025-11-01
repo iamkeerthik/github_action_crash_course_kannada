@@ -1,7 +1,6 @@
 # github_action_crash_course_kannada
 [![YouTube Video]](https://www.youtube.com/watch?v=3zy_ODpIZG8)
 
-https://youtu.be/
 
 This repository uses GitHub Actions to automate CI/CD pipelines for application builds, container deployments, and Terraform-based infrastructure provisioning.
 
