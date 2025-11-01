@@ -1,4 +1,4 @@
-name: Terraform CD (Matrix)
+name: Terraform CD (Matrix - Range Based)
 
 on:
   workflow_dispatch:
@@ -32,46 +32,25 @@ permissions:
 
 jobs:
   terraform:
-    name: "Terraform (${{ matrix.environment }})"
+    name: "Terraform Deploy - ${{ matrix.environment }}"
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         environment: [dev, stage, prod]
       max-parallel: 1
       fail-fast: false
 
+    # 👇 Only run this job if environment is in selected range
+    if: >
+      (github.event.inputs.start_env == 'dev' && github.event.inputs.end_env == 'dev' && matrix.environment == 'dev') ||
+      (github.event.inputs.start_env == 'dev' && github.event.inputs.end_env == 'stage' && (matrix.environment == 'dev' || matrix.environment == 'stage')) ||
+      (github.event.inputs.start_env == 'dev' && github.event.inputs.end_env == 'prod') ||
+      (github.event.inputs.start_env == 'stage' && github.event.inputs.end_env == 'stage' && matrix.environment == 'stage') ||
+      (github.event.inputs.start_env == 'stage' && github.event.inputs.end_env == 'prod' && (matrix.environment == 'stage' || matrix.environment == 'prod')) ||
+      (github.event.inputs.start_env == 'prod' && github.event.inputs.end_env == 'prod' && matrix.environment == 'prod')
+
     steps:
-      - name: Check if environment is within selected range
-        id: check
-        run: |
-          order=("dev" "stage" "prod")
-          start="${{ github.event.inputs.start_env }}"
-          end="${{ github.event.inputs.end_env }}"
-          current="${{ matrix.environment }}"
-
-          # Function to get index
-          get_index() {
-            for i in "${!order[@]}"; do
-              [[ "${order[$i]}" == "$1" ]] && echo "$i" && return
-            done
-          }
-
-          start_idx=$(get_index "$start")
-          end_idx=$(get_index "$end")
-          curr_idx=$(get_index "$current")
-
-          if [ "$curr_idx" -lt "$start_idx" ] || [ "$curr_idx" -gt "$end_idx" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Skip non-selected environment
-        if: steps.check.outputs.skip == 'true'
-        run: |
-          echo "⏩ Skipping environment: ${{ matrix.environment }}"
-          exit 0
-
       # ---------- SETUP ----------
       - name: Checkout code
         uses: actions/checkout@v4
