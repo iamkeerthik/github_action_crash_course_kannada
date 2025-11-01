@@ -31,6 +31,7 @@ Each .yaml file inside this folder defines an independent automation workflow â€
 | **docker-workflow.yaml** | Builds and pushes Docker images to AWS ECR based on environment or version tag. |
 | **cd-k8s-workflow.yaml** | Deploys the latest Docker image to the respective Kubernetes environment. |
 | **terraform-workflow.yaml** | Provisions or destroys infrastructure using Terraform with approval workflow. |
+| **terraform-matrix-workflow.yaml** | Manages multi-environment Terraform deployments using a matrix strategy for `dev`, `stage`, and `prod`. |
 | **workflow-release.yaml** | Creates version tags and GitHub releases for automated versioning and deployments. |
 
 ## âš¡ GitHub Actions Trigger Types
