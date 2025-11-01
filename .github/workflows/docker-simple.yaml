@@ -11,21 +11,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # --- Lint Dockerfile with hadolint CLI ---
       - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile
+        run: |
+          echo "🔍 Running Hadolint on Dockerfile..."
+          docker run --rm -i hadolint/hadolint < Dockerfile
 
+      # --- Build image once ---
       - name: Build Docker image
         run: |
           echo "🛠️ Building Docker image: demo-app:latest"
           docker build -t demo-app:latest .
 
+      # --- Trivy scan existing image ---
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: demo-app:latest
-          format: 'table'
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+        run: |
+          echo "🧪 Scanning built image with Trivy..."
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image demo-app:latest
