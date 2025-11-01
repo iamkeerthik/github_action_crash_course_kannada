@@ -14,10 +14,7 @@ jobs:
       - name: Lint Dockerfile with Hadolint
         run: |
           echo "Running Hadolint..."
-          docker pull -q hadolint/hadolint:latest >/dev/null 2>&1
-          docker run --rm -i hadolint/hadolint < Dockerfile > hadolint-report.txt
-          echo "=== Hadolint Report ==="
-          cat hadolint-report.txt
+          docker run --rm -v ${{ github.workspace }}:/workspace hadolint/hadolint hadolint /workspace/Dockerfile | tee hadolint-report.txt
 
       - name: Build Docker image
         run: |
