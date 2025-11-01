@@ -1,10 +1,10 @@
-name: Terraform CD (Matrix Envs with Approval)
+name: Terraform CD (Matrix with Approval)
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "Terraform action (plan/apply/destroy)"
+        description: "Terraform action"
         required: true
         default: "plan"
         type: choice
@@ -12,19 +12,10 @@ on:
           - plan
           - apply
           - destroy
-      start_env:
-        description: "Start environment"
+      environment:
+        description: "Select environment"
         required: true
         default: "dev"
-        type: choice
-        options:
-          - dev
-          - stage
-          - prod
-      end_env:
-        description: "End environment"
-        required: true
-        default: "prod"
         type: choice
         options:
           - dev
@@ -47,16 +38,6 @@ jobs:
         environment: [dev, stage, prod]
       max-parallel: 1
 
-    # Only include envs within start → end range
-    if: |
-      (matrix.environment == github.event.inputs.start_env) ||
-      (matrix.environment == github.event.inputs.end_env) ||
-      (
-        (github.event.inputs.start_env == 'dev' && github.event.inputs.end_env == 'prod') ||
-        (github.event.inputs.start_env == 'dev' && matrix.environment == 'stage') ||
-        (github.event.inputs.start_env == 'stage' && matrix.environment == 'prod')
-      )
-
     steps:
       # ---------- SETUP ----------
       - name: Checkout code
@@ -72,51 +53,62 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # ---------- SKIP NON-SELECTED ENVIRONMENTS ----------
+      - name: Skip if not selected environment
+        if: ${{ matrix.environment != github.event.inputs.environment }}
+        run: |
+          echo "⏩ Skipping ${{ matrix.environment }} (selected: ${{ github.event.inputs.environment }})"
+          exit 0
+          
       # ---------- INIT & WORKSPACE ----------
       - name: Terraform Init
         run: terraform -chdir=${{ env.TF_DIR }} init
 
       - name: Select or Create Workspace
         run: |
-          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ matrix.environment }} \
-            || terraform -chdir=${{ env.TF_DIR }} workspace new ${{ matrix.environment }}
-          echo "✅ Using workspace: $(terraform -chdir=${{ env.TF_DIR }} workspace show)"
+          if terraform -chdir=${{ env.TF_DIR }} workspace select ${{ matrix.environment }} 2>/dev/null; then
+            echo "✅ Using existing workspace: ${{ matrix.environment }}"
+          else
+            terraform -chdir=${{ env.TF_DIR }} workspace new ${{ matrix.environment }}
+          fi
 
       # ---------- PLAN ----------
       - name: Terraform Plan
         id: plan
         run: |
           if [ "${{ github.event.inputs.action }}" = "destroy" ]; then
-            terraform -chdir=${{ env.TF_DIR }} plan -destroy \
-              -var-file=env/${{ matrix.environment }}.tfvars -out=tfplan
+            terraform -chdir=${{ env.TF_DIR }} plan -destroy -var-file=env/${{ matrix.environment }}.tfvars -out=tfplan
           else
-            terraform -chdir=${{ env.TF_DIR }} plan \
-              -var-file=env/${{ matrix.environment }}.tfvars -out=tfplan
+            terraform -chdir=${{ env.TF_DIR }} plan -var-file=env/${{ matrix.environment }}.tfvars -out=tfplan
           fi
           terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > $GITHUB_WORKSPACE/plan-${{ matrix.environment }}.txt
+          echo "✅ Plan complete for ${{ matrix.environment }}"
         continue-on-error: true
 
-      # ---------- APPROVAL ISSUE ----------
+      # ---------- CREATE APPROVAL ISSUE ----------
+      - name: Add Approval Instructions
+        if: github.event.inputs.action != 'plan'
+        run: echo -e "\n\n---\n💬 **Approval Required**\nPlease comment 'yes' to approve or 'no' to cancel." >> plan-${{ matrix.environment }}.txt
+
       - name: Create Approval Issue
         if: github.event.inputs.action != 'plan'
         id: create_issue
         uses: peter-evans/create-issue-from-file@v5
         with:
-          title: "Approval: Terraform ${{ github.event.inputs.action }} → ${{ matrix.environment }}"
+          title: "Terraform Approval Required: ${{ github.event.inputs.action }} → ${{ matrix.environment }}"
           content-filepath: plan-${{ matrix.environment }}.txt
           labels: terraform, approval
           assignees: ${{ github.actor }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ---------- WAIT FOR APPROVAL ----------
-      - name: Wait for Approval
+      # ---------- WAIT FOR COMMENT ----------
+      - name: Wait for Approval Comment
         if: github.event.inputs.action != 'plan'
         id: wait
         run: |
-          echo "⏳ Waiting for approval on issue..."
+          echo "⏳ Waiting for approval on GitHub Issue..."
           issue_number=${{ steps.create_issue.outputs.issue-number }}
-
           for i in {1..30}; do
             comment=$(gh issue view $issue_number --json comments --jq '.comments[-1].body' || echo "")
             if [[ "$comment" =~ ^[Yy][Ee][Ss]$ ]]; then
@@ -126,38 +118,36 @@ jobs:
               echo "approval=no" >> $GITHUB_OUTPUT
               break
             fi
+            echo "🕒 Waiting for approval comment... ($i/30)"
             sleep 20
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ---------- AUTO CLOSE ISSUE ----------
-      - name: Close Issue (Approved)
+      # ---------- CLOSE ISSUE ----------
+      - name: Auto Close (Approved)
         if: steps.wait.outputs.approval == 'yes'
         uses: peter-evans/close-issue@v3
         with:
           issue-number: ${{ steps.create_issue.outputs.issue-number }}
           comment: |
-            ✅ Approved and executed Terraform **${{ github.event.inputs.action }}**  
-            Environment: **${{ matrix.environment }}**
+            ✅ Approved & executed Terraform **${{ github.event.inputs.action }}** for **${{ matrix.environment }}**
 
-      - name: Close Issue (Declined)
+      - name: Auto Close (Declined)
         if: steps.wait.outputs.approval == 'no'
         uses: peter-evans/close-issue@v3
         with:
           issue-number: ${{ steps.create_issue.outputs.issue-number }}
           comment: |
-            ❌ Terraform **${{ github.event.inputs.action }}** cancelled by user.
+            ❌ Terraform **${{ github.event.inputs.action }}** cancelled by @${{ github.actor }}  
 
-      # ---------- APPLY / DESTROY ----------
+      # ---------- APPLY OR DESTROY ----------
       - name: Terraform Apply
         if: steps.wait.outputs.approval == 'yes' && github.event.inputs.action == 'apply'
         run: |
-          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ matrix.environment }}
           terraform -chdir=${{ env.TF_DIR }} apply -auto-approve -var-file=env/${{ matrix.environment }}.tfvars
 
       - name: Terraform Destroy
         if: steps.wait.outputs.approval == 'yes' && github.event.inputs.action == 'destroy'
         run: |
-          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ matrix.environment }}
           terraform -chdir=${{ env.TF_DIR }} destroy -auto-approve -var-file=env/${{ matrix.environment }}.tfvars
