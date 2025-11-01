@@ -8,6 +8,7 @@ Each .yaml file inside this folder defines an independent automation workflow �
 
 
 📁 Folder Structure Example
+```bash
 📦 repo-root/
  ┣ 📂 .github/
  ┃ ┗ 📂 workflows/
@@ -19,6 +20,7 @@ Each .yaml file inside this folder defines an independent automation workflow �
  ┣ 📂 terraform/
  ┣ 📄 README.md
  ┗ 📄 other-source-files...
+ ```
 
  | File Name | Description |
 |------------|-------------|
