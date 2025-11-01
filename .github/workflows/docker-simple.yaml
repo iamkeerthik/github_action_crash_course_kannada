@@ -30,3 +30,4 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image --exit-code 0 --no-progress $IMAGE_NAME:$TAG | tee trivy-report.txt
           cat trivy-report.txt
+          
