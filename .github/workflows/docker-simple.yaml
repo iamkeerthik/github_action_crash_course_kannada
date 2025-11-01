@@ -1,32 +1,32 @@
-name: 🐳 Docker Lint & Scan
+name: Docker Build and Scan
 
 on:
   push:
 
 jobs:
-  docker-lint-scan:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # --- Lint Dockerfile with hadolint CLI ---
-      - name: Lint Dockerfile
+      - name: Lint Dockerfile with Hadolint
         run: |
-          echo "🔍 Running Hadolint on Dockerfile..."
-          docker run --rm -i hadolint/hadolint < Dockerfile
+          docker run --rm -i hadolint/hadolint < Dockerfile | tee hadolint-report.txt
+          cat hadolint-report.txt
 
-      # --- Build image once ---
       - name: Build Docker image
         run: |
-          echo "🛠️ Building Docker image: demo-app:latest"
-          docker build -t demo-app:latest .
+          IMAGE_NAME="demo-app"
+          TAG="latest"
+          docker build -t $IMAGE_NAME:$TAG .
 
-      # --- Trivy scan existing image ---
-      - name: Scan image with Trivy
+      - name: Scan Docker image with Trivy
         run: |
-          echo "🧪 Scanning built image with Trivy..."
+          IMAGE_NAME="demo-app"
+          TAG="latest"
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image demo-app:latest
+            aquasec/trivy image --exit-code 0 --no-progress $IMAGE_NAME:$TAG | tee trivy-report.txt
+          cat trivy-report.txt
