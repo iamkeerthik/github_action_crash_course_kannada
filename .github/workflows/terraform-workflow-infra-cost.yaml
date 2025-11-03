@@ -110,11 +110,10 @@ jobs:
             --out-file=/tmp/infracost.json
 
 
-      - name: Append cost summary to Terraform plan
+      - name: Append cost estimate to plan.txt
         run: |
           echo -e "\n\n---\n💰 **Estimated Monthly Cost**\n" >> $GITHUB_WORKSPACE/plan.txt
-          infracost output --path=/tmp/infracost.json --format=markdown >> $GITHUB_WORKSPACE/plan.txt
-          echo "✅ Appended cost summary to plan.txt"
+          cat infracost.md >> $GITHUB_WORKSPACE/plan.txt
 
 
       # ---------- CREATE ISSUE FOR APPROVAL ----------
