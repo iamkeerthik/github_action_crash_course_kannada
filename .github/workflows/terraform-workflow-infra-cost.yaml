@@ -101,14 +101,14 @@ jobs:
       - name: Configure Infracost API key
         run: infracost configure set api_key ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Generate cost estimate
+      - name: Generate cost estimate from Terraform plan JSON
         id: cost
         run: |
           infracost breakdown \
-            --path=${{ env.TF_DIR }} \
-            --terraform-plan-file=$GITHUB_WORKSPACE/plan.txt \
+            --path=$GITHUB_WORKSPACE/plan.json \
             --format=json \
             --out-file=/tmp/infracost.json
+
 
       - name: Append cost summary to Terraform plan
         run: |
