@@ -110,6 +110,13 @@ jobs:
             --out-file=/tmp/infracost.json
 
 
+      - name: Generate Markdown report
+        run: |
+          infracost output \
+            --path /tmp/infracost.json \
+            --format github-comment \
+            --out-file infracost.md
+
       - name: Append cost estimate to plan.txt
         run: |
           echo -e "\n\n---\n💰 **Estimated Monthly Cost**\n" >> $GITHUB_WORKSPACE/plan.txt
