@@ -11,3 +11,7 @@ resource "aws_s3_bucket" "demo_bucket" {
     Environment = terraform.workspace
   }
 }
+resource "aws_instance" "demo_server" {
+  ami           = "ami-0c02fb55956c7d316" # Amazon Linux 2 (free-tier eligible)
+  instance_type = "t2.micro"
+}
