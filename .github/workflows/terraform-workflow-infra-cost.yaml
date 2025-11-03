@@ -1,0 +1,203 @@
+name: Terraform CD 
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      environment:
+        description: "Select environment (Terraform workspace)"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+env:
+  AWS_REGION: ap-south-1
+  TF_DIR: terraform
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------- SETUP ----------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ---------- INIT & WORKSPACE SELECT ----------
+      - name: Terraform Init
+        run: terraform -chdir=${{ env.TF_DIR }} init
+
+      - name: Select or Create Workspace
+        run: |
+          echo "🔍 Checking Terraform workspace: ${{ github.event.inputs.environment }}"
+          if terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }} 2>/dev/null; then
+            echo "✅ Using existing workspace: ${{ github.event.inputs.environment }}"
+          else
+            echo "ℹ️ Workspace not found. Creating new workspace: ${{ github.event.inputs.environment }}"
+            terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
+          fi
+
+        # ---------- TERRAFORM PLAN WITH WORKSPACE SUPPORT ----------
+      - name: Terraform Plan
+        id: plan
+        run: |
+          # Select or create workspace dynamically
+          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }} \
+            || terraform -chdir=${{ env.TF_DIR }} workspace new ${{ github.event.inputs.environment }}
+
+          echo "📦 Using workspace: $(terraform -chdir=${{ env.TF_DIR }} workspace show)"
+
+          # Run normal or destroy plan based on input action
+          if [ "${{ github.event.inputs.action }}" = "destroy" ]; then
+            echo "🗑️ Running Terraform destroy plan..."
+            terraform -chdir=${{ env.TF_DIR }} plan -destroy \
+              -var-file=env/${{ github.event.inputs.environment }}.tfvars \
+              -out=tfplan
+          else
+            echo "🚀 Running standard Terraform plan..."
+            terraform -chdir=${{ env.TF_DIR }} plan \
+              -var-file=env/${{ github.event.inputs.environment }}.tfvars \
+              -out=tfplan
+          fi
+
+          # Export plan output to global workspace path
+          terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > $GITHUB_WORKSPACE/plan.txt
+          echo "✅ Terraform plan complete. Output saved to $GITHUB_WORKSPACE/plan.txt"
+        continue-on-error: true
+
+              # ---------- COST ESTIMATION USING INFRACOST ----------
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v2
+        with:
+          version: latest
+
+      - name: Authenticate Infracost
+        run: infracost auth login --api-key ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate cost estimate
+        id: cost
+        run: |
+          infracost breakdown \
+            --path=${{ env.TF_DIR }} \
+            --terraform-plan-file=$GITHUB_WORKSPACE/plan.txt \
+            --format=json \
+            --out-file=/tmp/infracost.json
+
+      - name: Append cost summary to Terraform plan
+        run: |
+          echo -e "\n\n---\n💰 **Estimated Monthly Cost**\n" >> $GITHUB_WORKSPACE/plan.txt
+          infracost output --path=/tmp/infracost.json --format=markdown >> $GITHUB_WORKSPACE/plan.txt
+          echo "✅ Appended cost summary to plan.txt"
+
+
+      # ---------- CREATE ISSUE FOR APPROVAL ----------
+      - name: Add Approval Instructions
+        if: github.event.inputs.action != 'plan'
+        run: |
+          echo -e "\n\n---\n💬 **Approval Required**\nPlease comment 'yes' to approve and proceed, or 'no' to cancel." >> plan.txt
+        shell: bash
+
+      - name: Create Approval Issue
+        if: github.event.inputs.action != 'plan'
+        id: create_issue
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "Terraform Approval Required: ${{ github.event.inputs.action }} → ${{ github.event.inputs.environment }}"
+          content-filepath: plan.txt
+          labels: terraform, approval
+          assignees: ${{ github.actor }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      # ---------- WAIT FOR USER DECISION ----------
+      - name: Wait for Approval Comment
+        if: github.event.inputs.action != 'plan'
+        id: wait
+        run: |
+          echo "Waiting for approval on GitHub Issue..."
+          issue_number=${{ steps.create_issue.outputs.issue-number }}
+
+          if [ -z "$issue_number" ]; then
+            echo "❌ No issue created — please check earlier steps."
+            exit 1
+          fi
+
+          echo "👉 Issue created: https://github.com/${{ github.repository }}/issues/$issue_number"
+          echo "issue_number=$issue_number" >> $GITHUB_OUTPUT
+
+          for i in {1..30}; do
+            comment=$(gh issue view $issue_number --json comments --jq '.comments[-1].body' || echo "")
+            if [[ "$comment" =~ ^[Yy][Ee][Ss]$ ]]; then
+              echo "approval=yes" >> $GITHUB_OUTPUT
+              break
+            elif [[ "$comment" =~ ^[Nn][Oo]$ ]]; then
+              echo "approval=no" >> $GITHUB_OUTPUT
+              break
+            fi
+            echo "⏳ Waiting for approval comment... ($i/30)"
+            sleep 20
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ---------- AUTO CLOSE ISSUE ----------
+      - name: Auto Close Approval Issue (Approved)
+        if: steps.wait.outputs.approval == 'yes'
+        uses: peter-evans/close-issue@v3
+        with:
+          issue-number: ${{ steps.create_issue.outputs.issue-number }}
+          comment: |
+            ✅ Approved and executed Terraform **${{ github.event.inputs.action }}**  
+            Environment: **${{ github.event.inputs.environment }}**  
+            Approved by: @${{ github.actor }}
+
+      - name: Auto Close Approval Issue (Declined)
+        if: steps.wait.outputs.approval == 'no'
+        uses: peter-evans/close-issue@v3
+        with:
+          issue-number: ${{ steps.create_issue.outputs.issue-number }}
+          comment: |
+            ❌ Terraform **${{ github.event.inputs.action }}** cancelled by @${{ github.actor }}  
+            Environment: **${{ github.event.inputs.environment }}**
+
+      # ---------- APPLY / DESTROY WITH APPROVAL ----------
+      - name: Terraform Apply
+        if: steps.wait.outputs.approval == 'yes' && github.event.inputs.action == 'apply'
+        run: |
+          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }}
+          terraform -chdir=${{ env.TF_DIR }} apply -auto-approve -var-file=env/${{ github.event.inputs.environment }}.tfvars
+
+      - name: Terraform Destroy
+        if: steps.wait.outputs.approval == 'yes' && github.event.inputs.action == 'destroy'
+        run: |
+          terraform -chdir=${{ env.TF_DIR }} workspace select ${{ github.event.inputs.environment }}
+          terraform -chdir=${{ env.TF_DIR }} destroy -auto-approve -var-file=env/${{ github.event.inputs.environment }}.tfvars
+
+       
