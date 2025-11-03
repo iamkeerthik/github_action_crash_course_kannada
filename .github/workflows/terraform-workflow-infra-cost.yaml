@@ -88,14 +88,17 @@ jobs:
 
           # Export plan output to global workspace path
           terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > $GITHUB_WORKSPACE/plan.txt
-          echo "✅ Terraform plan complete. Output saved to $GITHUB_WORKSPACE/plan.txt"
+          
+          # Export plan output to text and JSON
+          terraform -chdir=${{ env.TF_DIR }} show -no-color tfplan > $GITHUB_WORKSPACE/plan.txt
+          terraform -chdir=${{ env.TF_DIR }} show -json tfplan > $GITHUB_WORKSPACE/plan.json
+          echo "✅ Terraform plan complete. Output saved to $GITHUB_WORKSPACE/plan.txt and plan.json"
         continue-on-error: true
 
-              # ---------- COST ESTIMATION USING INFRACOST ----------
+      # ---------- COST ESTIMATION USING INFRACOST ----------
       - name: Setup Infracost
         uses: infracost/actions/setup@v2
         with:
-          #version: latest
           version: "0.10.31"
 
       - name: Configure Infracost API key
@@ -108,7 +111,6 @@ jobs:
             --path=$GITHUB_WORKSPACE/plan.json \
             --format=json \
             --out-file=/tmp/infracost.json
-
 
       - name: Generate Markdown report
         run: |
