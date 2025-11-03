@@ -95,10 +95,11 @@ jobs:
       - name: Setup Infracost
         uses: infracost/actions/setup@v2
         with:
-          version: latest
+          #version: latest
+          version: "0.10.31"
 
-      - name: Authenticate Infracost
-        run: infracost auth login --api-key ${{ secrets.INFRACOST_API_KEY }}
+      - name: Configure Infracost API key
+        run: infracost configure set api_key ${{ secrets.INFRACOST_API_KEY }}
 
       - name: Generate cost estimate
         id: cost
