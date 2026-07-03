@@ -1,7 +1,13 @@
 name: Docker Build and Scan
 
 on:
-  push:
+  workflow_dispatch:
+    inputs:
+      IMAGE_NAME:
+       description: "Please give a image name"
+       required: true
+       default: "build_app"
+
 
 jobs:
   build:
@@ -13,7 +19,6 @@ jobs:
 
       - name: Build Docker image
         run: |
-          IMAGE_NAME="demo-app"
           TAG="latest"
           docker build -t $IMAGE_NAME:$TAG .
           
