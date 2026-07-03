@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       IMAGE_NAME:
-       description: "Please give a image name"
-       required: true
-       default: "build_app"
+         description: "Please give a image name"
+         required: true
+         default: "build_app"
 
 
 jobs:
