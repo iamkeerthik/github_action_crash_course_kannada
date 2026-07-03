@@ -1,12 +1,11 @@
-name: Docker Build and Scan
-
+name: Manual work flow check
 on:
   workflow_dispatch:
     inputs:
-      IMAGE_NAME:
-         description: "Please give a image name"
-         required: true
-         default: "build_app"
+      image_name:
+        description: "Please give an image name"
+        required: true
+        default: "build_app"
 
 
 jobs:
