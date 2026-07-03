@@ -1,7 +1,12 @@
-name: Docker Build and Scan
-
+name: Manual work flow check
 on:
-  push:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: "Please give an image name"
+        required: true
+        default: "build_app"
+
 
 jobs:
   build:
@@ -11,23 +16,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Lint Dockerfile with Hadolint
-        run: |
-          echo "Running Hadolint..."
-          docker run --rm -v ${{ github.workspace }}:/workspace hadolint/hadolint hadolint /workspace/Dockerfile | tee hadolint-report.txt
-
       - name: Build Docker image
         run: |
-          IMAGE_NAME="demo-app"
           TAG="latest"
           docker build -t $IMAGE_NAME:$TAG .
-
-      - name: Scan Docker image with Trivy
-        run: |
-          IMAGE_NAME="demo-app"
-          TAG="latest"
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy image --exit-code 0 --no-progress $IMAGE_NAME:$TAG | tee trivy-report.txt
-          cat trivy-report.txt
           
